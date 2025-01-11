@@ -9,6 +9,7 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
+import java.text.SimpleDateFormat;
 import java.time.*;
 import java.time.format.*;
 import java.util.*;
@@ -51,6 +52,7 @@ public class KubectlConnector extends JFrame {
     private javax.swing.Timer logWatchTimer;
     private String originalLogContent;
     private SearchDialog searchDialog;
+    private JButton openInVSCodeButton; // New Button
 
     public KubectlConnector() {
         FlatLightLaf.setup();
@@ -74,7 +76,7 @@ public class KubectlConnector extends JFrame {
     private void initializeEnvironmentCommands() {
         environmentCommands = new LinkedHashMap<>();  // Using LinkedHashMap to maintain order
         environmentCommands.put("Test", "connect-aws-test-kubectl");
-        environmentCommands.put("Produat", "connect-aws-prduat-kubectl");
+        environmentCommands.put("Production", "connect-aws-production-kubectl");
         environmentCommands.put("Dev", "connect-aws-dev-kubectl");
         environmentCommands.put("UAT", "connect-aws-uat-kubectl");
     }
@@ -176,14 +178,14 @@ public class KubectlConnector extends JFrame {
                     @Override
                     public void keyPressed(KeyEvent e) {
                         // Clear text on first keypress that's not a control key
-                        if (!firstKeyTyped && 
-                            e.getKeyCode() != KeyEvent.VK_ENTER && 
-                            e.getKeyCode() != KeyEvent.VK_UP && 
-                            e.getKeyCode() != KeyEvent.VK_DOWN &&
-                            e.getKeyCode() != KeyEvent.VK_LEFT &&
-                            e.getKeyCode() != KeyEvent.VK_RIGHT &&
-                            e.getKeyCode() != KeyEvent.VK_BACK_SPACE &&
-                            e.getKeyCode() != KeyEvent.VK_DELETE) {
+                        if (!firstKeyTyped &&
+                                e.getKeyCode() != KeyEvent.VK_ENTER &&
+                                e.getKeyCode() != KeyEvent.VK_UP &&
+                                e.getKeyCode() != KeyEvent.VK_DOWN &&
+                                e.getKeyCode() != KeyEvent.VK_LEFT &&
+                                e.getKeyCode() != KeyEvent.VK_RIGHT &&
+                                e.getKeyCode() != KeyEvent.VK_BACK_SPACE &&
+                                e.getKeyCode() != KeyEvent.VK_DELETE) {
                             textField.setText("");
                             firstKeyTyped = true;
                         }
@@ -191,9 +193,9 @@ public class KubectlConnector extends JFrame {
 
                     @Override
                     public void keyReleased(KeyEvent e) {
-                        if (e.getKeyCode() != KeyEvent.VK_ENTER && 
-                            e.getKeyCode() != KeyEvent.VK_UP && 
-                            e.getKeyCode() != KeyEvent.VK_DOWN) {
+                        if (e.getKeyCode() != KeyEvent.VK_ENTER &&
+                                e.getKeyCode() != KeyEvent.VK_UP &&
+                                e.getKeyCode() != KeyEvent.VK_DOWN) {
                             String text = textField.getText();
                             isFiltering = true;
                             filterPodList(text);
@@ -226,7 +228,7 @@ public class KubectlConnector extends JFrame {
                 return new Dimension(400, size.height);
             }
         };
-        
+
         // Set a custom popup menu listener to adjust the dropdown width
         podListCombo.addPopupMenuListener(new PopupMenuListener() {
             @Override
@@ -234,7 +236,7 @@ public class KubectlConnector extends JFrame {
                 JComboBox<?> combo = (JComboBox<?>) e.getSource();
                 Object comp = combo.getUI().getAccessibleChild(combo, 0);
                 if (!(comp instanceof JPopupMenu)) return;
-                
+
                 JPopupMenu popup = (JPopupMenu) comp;
                 JScrollPane scrollPane = (JScrollPane) popup.getComponent(0);
                 scrollPane.setPreferredSize(new Dimension(400, 400));
@@ -286,9 +288,14 @@ public class KubectlConnector extends JFrame {
         resetSearchButton = createStyledButton("Reset Search");
         resetSearchButton.addActionListener(e -> resetSearch());
 
+        // **Add the "Open in VS Code" button**
+        openInVSCodeButton = createStyledButton("Open in VS Code");
+        openInVSCodeButton.addActionListener(e -> openInVSCode());
+
         buttonPanel.add(searchButton);
         buttonPanel.add(resetSearchButton);
         buttonPanel.add(exportButton);
+        buttonPanel.add(openInVSCodeButton); // Add the new button here
 
         // Output area
         outputArea = new JTextArea();
@@ -331,7 +338,7 @@ public class KubectlConnector extends JFrame {
             setSize(500, 600);
             setLocationRelativeTo(parent);
             setResizable(true);
-            
+
             currentSearchGroups = new ArrayList<>();
             initializeComponents();
         }
@@ -380,8 +387,8 @@ public class KubectlConnector extends JFrame {
             criteriaListModel = new DefaultListModel<>();
             criteriaList = new JList<>(criteriaListModel);
             criteriaList.setCellRenderer(new DefaultListCellRenderer() {
-                public Component getListCellRendererComponent(JList<?> list, Object value, 
-                        int index, boolean isSelected, boolean cellHasFocus) {
+                public Component getListCellRendererComponent(JList<?> list, Object value,
+                                                              int index, boolean isSelected, boolean cellHasFocus) {
                     super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                     if (value instanceof LogSearchCriteria) {
                         setText(value.toString());
@@ -456,10 +463,10 @@ public class KubectlConnector extends JFrame {
                 }
 
                 LogSearchCriteria criteria = new LogSearchCriteria(
-                    searchText,
-                    (String) operationCombo.getSelectedItem(),
-                    caseSensitiveCheck.isSelected(),
-                    regexCheck.isSelected()
+                        searchText,
+                        (String) operationCombo.getSelectedItem(),
+                        caseSensitiveCheck.isSelected(),
+                        regexCheck.isSelected()
                 );
 
                 criteriaListModel.addElement(criteria);
@@ -583,11 +590,11 @@ public class KubectlConnector extends JFrame {
 
             String command = String.format("kubectl logs %s", selectedPod);
             String logs = sshConnection.executeCommand(command);
-            
+
             outputArea.setText(logs);
             outputArea.setCaretPosition(0);
             originalLogContent = logs;
-            
+
         } catch (Exception e) {
             showError("Failed to get logs: " + e.getMessage());
         }
@@ -624,7 +631,7 @@ public class KubectlConnector extends JFrame {
 
             String result = sshConnection.executeCommand("kubectl get pods");
             podInfoMap.clear();
-            
+
             String[] lines = result.split("\n");
             for (int i = 1; i < lines.length; i++) { // Skip header line
                 String[] parts = lines[i].trim().split("\\s+");
@@ -684,23 +691,23 @@ public class KubectlConnector extends JFrame {
                 // First connect to jump server
                 boolean connected = sshConnection.connect(host, username, password);
                 if (!connected) {
-                    SwingUtilities.invokeLater(() -> 
-                        showError("Failed to connect to server. Please check your credentials and try again."));
+                    SwingUtilities.invokeLater(() ->
+                            showError("Failed to connect to server. Please check your credentials and try again."));
                     return;
                 }
 
                 // Then execute the environment command
                 String envCommand = environmentCommands.get(selectedEnv);
                 if (envCommand == null) {
-                    SwingUtilities.invokeLater(() -> 
-                        showError("No command found for environment: " + selectedEnv));
+                    SwingUtilities.invokeLater(() ->
+                            showError("No command found for environment: " + selectedEnv));
                     return;
                 }
 
                 String result = sshConnection.executeCommand(envCommand);
                 if (result.toLowerCase().contains("error") || result.toLowerCase().contains("failed")) {
-                    SwingUtilities.invokeLater(() -> 
-                        showError("Failed to connect to environment: " + result));
+                    SwingUtilities.invokeLater(() ->
+                            showError("Failed to connect to environment: " + result));
                     return;
                 }
 
@@ -736,7 +743,8 @@ public class KubectlConnector extends JFrame {
                 usernameField.setText(savedCredentials.getUsername());
                 passwordField.setText(savedCredentials.getPassword());
                 hostField.setText(savedCredentials.getHost());
-                rememberCredentialsCheckbox.setSelected(true);
+                environmentCombo.setSelectedItem(savedCredentials.getEnvironment());
+                rememberCredentialsCheckbox.setSelected(savedCredentials.isRememberMe());
             }
         }
     }
@@ -783,7 +791,7 @@ public class KubectlConnector extends JFrame {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Export Logs");
         fileChooser.setSelectedFile(new File("kubectl_logs.txt"));
-        
+
         if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             try (PrintWriter writer = new PrintWriter(fileChooser.getSelectedFile())) {
                 writer.print(outputArea.getText());
@@ -870,6 +878,50 @@ public class KubectlConnector extends JFrame {
         }
     }
 
+    // **New Method to Open VS Code**
+    private void openInVSCode() {
+        try {
+            // Default VS Code installation paths for Windows
+            String[] possiblePaths = {
+                    System.getenv("LOCALAPPDATA") + "\\Programs\\Microsoft VS Code\\Code.exe",
+                    System.getenv("ProgramFiles") + "\\Microsoft VS Code\\Code.exe",
+                    System.getenv("ProgramFiles(x86)") + "\\Microsoft VS Code\\Code.exe"
+            };
+
+            String vsCodePath = null;
+            for (String path : possiblePaths) {
+                if (new File(path).exists()) {
+                    vsCodePath = path;
+                    break;
+                }
+            }
+
+            if (vsCodePath == null) {
+                showError("VS Code not found in common installation locations. Please ensure VS Code is installed.");
+                return;
+            }
+
+            // Create a temporary file with the log content
+            String tempDir = System.getProperty("java.io.tmpdir");
+            String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+            String fileName = "pod_logs_" + timestamp + ".log";
+            File tempFile = new File(tempDir, fileName);
+
+            // Write the log content to the file
+            try (FileWriter writer = new FileWriter(tempFile)) {
+                writer.write(outputArea.getText());
+            }
+
+            // Open VS Code with the file
+            ProcessBuilder pb = new ProcessBuilder(vsCodePath, tempFile.getAbsolutePath());
+            pb.start();
+
+            showInfo("Opening logs in VS Code...");
+        } catch (Exception e) {
+            showError("Failed to open VS Code: " + e.getMessage());
+        }
+    }
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new KubectlConnector());
     }
@@ -877,15 +929,17 @@ public class KubectlConnector extends JFrame {
 
 class PodListCellRenderer extends DefaultListCellRenderer {
     @Override
-    public Component getListCellRendererComponent(JList<?> list, Object value, 
-                                                int index, boolean isSelected, boolean cellHasFocus) {
+    public Component getListCellRendererComponent(JList<?> list, Object value,
+                                                  int index, boolean isSelected, boolean cellHasFocus) {
         super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
         if (value instanceof PodInfo) {
             PodInfo podInfo = (PodInfo) value;
-            setText(String.format("%s (%s) - %s", 
-                podInfo.getName(), 
-                podInfo.getStatus(), 
-                formatDuration(Duration.between(podInfo.getStartTime(), LocalDateTime.now()))));
+            setText(String.format("%s (%s) - %s",
+                    podInfo.getName(),
+                    podInfo.getStatus(),
+                    formatDuration(Duration.between(podInfo.getStartTime(), LocalDateTime.now()))));
+        } else if (value instanceof String) {
+            setText((String) value);
         }
         return this;
     }
@@ -894,7 +948,7 @@ class PodListCellRenderer extends DefaultListCellRenderer {
         long days = duration.toDays();
         long hours = duration.toHoursPart();
         long minutes = duration.toMinutesPart();
-        
+
         if (days > 0) {
             return String.format("%dd %dh", days, hours);
         } else if (hours > 0) {
