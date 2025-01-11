@@ -74,10 +74,10 @@ public class KubectlConnector extends JFrame {
     }
 
     private void initializeEnvironmentCommands() {
-        environmentCommands = new LinkedHashMap<>();  // Using LinkedHashMap to maintain order
+        environmentCommands = new LinkedHashMap<>();
+        environmentCommands.put("Dev", "connect-aws-dev-kubectl");
         environmentCommands.put("Test", "connect-aws-test-kubectl");
         environmentCommands.put("Production", "connect-aws-production-kubectl");
-        environmentCommands.put("Dev", "connect-aws-dev-kubectl");
         environmentCommands.put("UAT", "connect-aws-uat-kubectl");
     }
 
